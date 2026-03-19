@@ -1,5 +1,7 @@
+from dotenv import load_dotenv
 from langchain_core.documents import Document
 
+load_dotenv()
 # from crawler import scrape
 
 def build_documents(crawled_data: list[dict]) -> list[Document]:

@@ -1,8 +1,10 @@
+from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from crawler import scrape
 from document_generator import build_documents
 
+load_dotenv()
 
 def split_documents_in_chunks(documents):
     splitter = RecursiveCharacterTextSplitter(

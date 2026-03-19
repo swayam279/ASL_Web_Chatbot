@@ -1,6 +1,7 @@
 import time
 from urllib.parse import urlparse
 
+from dotenv import load_dotenv
 from langchain_core.documents import Document
 
 from crawler import scrape
@@ -13,6 +14,8 @@ from vector_store import (
     get_retriever,
     make_vector_store,
 )
+
+load_dotenv()
 
 
 def get_url() -> str:

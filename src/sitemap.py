@@ -1,7 +1,9 @@
+from dotenv import load_dotenv
 from usp.tree import sitemap_tree_for_homepage
 
 from url_validator import url_checker
 
+load_dotenv()
 
 def create_sitemap(url: str) -> list[str]:
     """ 
@@ -22,4 +24,6 @@ def create_sitemap(url: str) -> list[str]:
 
 if __name__ == "__main__":
     url= input("Enter a url: ")
-    print(create_sitemap(url))
+    sitemap= create_sitemap(url)
+    print(sitemap)
+    # print(len(sitemap))

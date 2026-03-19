@@ -65,7 +65,7 @@ def make_vector_store(chunks: list, collection_name: str) -> Chroma:
         
         return vectorstore
 
-def get_retriever(base_url: str, k: int=8):
+def get_retriever(base_url: str, k: int=5):
     """ 
     This returns a retriever for each independant website based on its base url.
     """

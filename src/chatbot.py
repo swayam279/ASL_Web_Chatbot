@@ -4,43 +4,51 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_mistralai import ChatMistralAI
 
+from vector_store import get_retriever
+
 load_dotenv()
 
 
-#for follow up questions:
-Rephrase_Prompt= ChatPromptTemplate.from_messages(
-    [
-        ("system",
-        "Given the conversation history and the user's latest message, rewrite the latest message as a fully self-contained question. Do NOT answer it. If it is already self-contained, return it unchanged."),
-        MessagesPlaceholder("chat_history"),
-        ("human", "{input}"),
-    ]
-)
+MAX_HISTORY_LENGTH= 3
 
 # system prompt for the chatbot
-QA_System_Prompt= ChatPromptTemplate.from_messages(
-    [
-        ("system",
-        "You are an assistant for {base_url}.\n\n"
-        "Rules:\n"
-        "1. Answer ONLY using the context below. Never use outside knowledge.\n"
-        "2. If the answer is not in the context, say: "
-        "'I could not find that information from the website.'\n"
-        "3. At the end of your answer, always list the source URLs you used:\n"
-        "   **Sources:**\n"
-        "   - <url>\n\n"
-        "Context:\n{context}"),
-        MessagesPlaceholder("chat_history"),
-        ("human", "{input}"),
-    ]
-)
+QA_System_Prompt = ChatPromptTemplate.from_messages([
+    ("system",
+     "You are a documentation assistant for {base_url}.\n"
+     "If the user enters some generic greetings or instructions, reply normally in a friendly tone. Do not look at context in this case.\n"
+     "If the user asks anything related to the website: \n"
+     "Answer using ONLY the context below. No outside knowledge.\n"
+     "If the answer is not present in the context, respond with exactly:\n"
+     "'I could not find that in the documentation.'\n"
+     "and nothing else — no sources, no suggestions.\n"
+     "If you can answer, be concise. Use bullet points only for 3+ distinct items.\n"
+     "When you answer successfully, end with:\n"
+     "**Sources:**\n- <url>\n\n"
+     "Context:\n{context}"),
+    MessagesPlaceholder("chat_history"),
+    ("human", "{input}"),
+])
+
+def build_retriever_query(user_input: str, chat_history: list) -> str:
+    """
+    Combines all the user messages to pass to retriever
+    """
+    if not chat_history:
+        return user_input
+
+    last_human_messages = [m for m in chat_history if isinstance(m, HumanMessage)]
+    if last_human_messages:
+        for msg in last_human_messages:
+            last_human="\n".join(msg.content) 
+        return f"{last_human} {user_input}"
+
+    return user_input
 
 def get_llm_model():
-    """ 
+    """
     Fetch llm model for the chatbot.
     """
-    
-    model= ChatMistralAI(model='mistral-medium-latest')
+    model= ChatMistralAI(model_name='mistral-medium-latest')
     return model
 
 def format_docs(docs) -> str:
@@ -62,6 +70,13 @@ def get_source_urls(docs) -> list[str]:
             urls.append(url)
     return urls
 
+def history_window(chat_history: list) -> list:
+    """
+    This function only keeps the last {MAX_HISTORY_LENGTH} messages pair in the chat history.
+    """
+    
+    return chat_history[-(MAX_HISTORY_LENGTH*2):]
+
 def build_chat_history(pairs: list[tuple[str, str]]) -> str:
     """ 
     Converts the conversation pairs into langchain message object for placeholders.
@@ -77,25 +92,17 @@ def Chat(retriever, base_url: str, user_input: str, chat_history: list) -> dict:
     """ 
     The main Chatbot function.
     """
-    
     model= get_llm_model()
     
-    if chat_history:
-        retriever_query= (Rephrase_Prompt | model | StrOutputParser()).invoke({'input': user_input, 'chat_history': chat_history})
-    
-    else:
-        retriever_query= user_input
-        
+    history= history_window(chat_history)
+    retriever_query= build_retriever_query(user_input, history)
     docs= retriever.invoke(retriever_query)
-    
     context= format_docs(docs)
-    
-    # chat_history= build_chat_history(chat_history)
     
     #model reply
     answer= (QA_System_Prompt | model | StrOutputParser()).invoke({
-        'input': user_input,
-        'chat_history': chat_history,
+        'input': f'Human Input: {user_input}',
+        'chat_history': history,
         'context': context,
         'base_url': base_url
     })
@@ -104,19 +111,55 @@ def Chat(retriever, base_url: str, user_input: str, chat_history: list) -> dict:
         'answer': answer,
         'source_urls': get_source_urls(docs)
     }
+
+def Chat_Stream(retriever, base_url: str, user_input: str, chat_history: str):
+    """ 
+    Streams the response instead of waiting for complete output.
+    """
+    model= get_llm_model()
     
+    history= history_window(chat_history)
+
+    docs= retriever.invoke(user_input)
+    print("\n=== RETRIEVER DEBUG ===")
+    print(f"Query: {user_input}")
+    print(f"Docs retrieved: {len(docs)}")
+    for i, doc in enumerate(docs, 1):
+        print(f"\n[{i}] URL: {doc.metadata.get('url')}")
+        print(f"Content preview: {doc.page_content[:50]}")
+        print("======================\n")
+    context= format_docs(docs)
+    
+    for chunk in (QA_System_Prompt | model | StrOutputParser()).stream({
+        'input': f'Human Input: {user_input}',
+        'chat_history': history,
+        'context': context,
+        'base_url': base_url,
+    }):
+        yield chunk
+
 if __name__ == "__main__":
     from vector_store import get_retriever
+ 
+    base_url  = "https://webscraper.io/"
+    retriever = get_retriever(base_url)
+ 
+    # print("=== Turn 1 ===")
+    # r1 = Chat_Stream(retriever, base_url, "What are the test sites available?", [])
+    # print("Answer:", r1["answer"])
+    # print("Sources:", r1["source_urls"])
+ 
+    # history = build_chat_history([
+    #     ("What are the test sites available?", r1["answer"])
+    # ])
+ 
+    # print("\n=== Turn 2 (follow-up) ===")
+    # r2 = Chat_Stream(retriever, base_url, "Tell me more about the first one.", history)
+    # print("Answer:", r2["answer"])
+    # print("Sources:", r2["source_urls"])
     
-    base_url='https://webscraper.io/'
+    # print(len(history))
     
-    retriever= get_retriever(base_url)
-    
-    Question= 'What are the test sites available?'
-    
-    result= Chat(retriever, base_url, Question, chat_history=[])
-    
-    print("Answer:\n", result["answer"])
-    print("\nSources:")
-    for s in result["source_urls"]:
-        print(" -", s)
+    stream = Chat_Stream(retriever, base_url, "What are the test sites available?", [])
+    answer = "".join(stream)
+    print("Answer:", answer)

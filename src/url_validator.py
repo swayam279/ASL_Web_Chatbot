@@ -1,7 +1,9 @@
 from urllib.parse import urlparse
 
 import requests
+from dotenv import load_dotenv
 
+load_dotenv()
 
 def url_checker(url, timeout= 10):
     parsed= urlparse(url)

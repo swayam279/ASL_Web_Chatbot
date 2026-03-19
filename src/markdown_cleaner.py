@@ -1,4 +1,6 @@
+from dotenv import load_dotenv
 
+load_dotenv()
 
 
 def clean_markdown(text: str) -> str:

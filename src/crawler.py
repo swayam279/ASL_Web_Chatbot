@@ -1,13 +1,15 @@
 import asyncio
 import concurrent.futures
 import sys
- 
+
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
 from crawl4ai.content_filter_strategy import PruningContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
- 
+from dotenv import load_dotenv
+
 from markdown_cleaner import clean_markdown
- 
+
+load_dotenv()
  
 async def async_scrape(urls: list[str], base_url: str) -> list[dict]:
     """
@@ -131,7 +133,7 @@ def scrape(urls: list[str], base_url: str) -> list[dict]:
                             structured_results.append({
                                 "url": result.url,
                                 "base_url": base_url,
-                                "content": f"Source: {result.url}\n\n{cleaned}"
+                                "content": f"{cleaned}"
                             })
                     print(f"Scraping completed for {len(urls)} URLs.")
                     return structured_results
@@ -152,4 +154,4 @@ def scrape(urls: list[str], base_url: str) -> list[dict]:
  
  
 if __name__ == "__main__":
-    print(scrape(["https://docs.langchain.com/oss/python/integrations/tools"], "https://docs.langchain.com/")[0]['url'])
+    print(scrape(["https://www.screener.in/explore/"], "https://www.screener.in/")[0]['content'])
